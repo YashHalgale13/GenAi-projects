@@ -1,6 +1,14 @@
-Flask>=3.0,<4.0
-requests>=2.31,<3.0
-python-dotenv>=1.0,<2.0
-PyMuPDF>=1.24,<2.0
-python-docx>=1.1,<2.0
-sentence-transformers>=3.0,<6.0
+# Text-to-Video Foundation Model Dependencies
+# Install PyTorch with CUDA support first:
+# Windows/Linux (CUDA 12.1): pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+# CPU Only: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+diffusers>=0.30.0,<0.36.0
+transformers>=4.41.0,<4.47.0
+accelerate>=0.30.0
+safetensors>=0.4.3
+gradio>=4.44.0,<6.0.0
+imageio>=2.34.0
+imageio-ffmpeg>=0.5.1
+pillow>=10.0.0
+numpy>=1.24.0,<3.0.0
