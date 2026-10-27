@@ -1,69 +1,66 @@
-# 🧠 Experiment 5 — Variational Autoencoder (VAE) for MNIST Image Generation
+# 👤 Experiment 6 — Face Generation using DCGAN on the CelebA Dataset
 
-A Generative AI project that implements a **Variational Autoencoder (VAE)** using **TensorFlow/Keras** to learn the latent representation of handwritten digits from the MNIST dataset and generate new MNIST-like images.
+Generate realistic human face images using a **Deep Convolutional Generative Adversarial Network (DCGAN)** trained on the **CelebA** dataset with **PyTorch**.
 
 ---
 
 ## 🌟 About
 
-This experiment demonstrates how a **Variational Autoencoder (VAE)** can learn a compressed probabilistic representation of images and generate entirely new handwritten digits by sampling from the learned latent space. The project also includes a simple **Flask web application** for generating images using the trained decoder model.
+This project implements a **Deep Convolutional Generative Adversarial Network (DCGAN)** to generate synthetic human face images. The model is trained on the **CelebA** dataset, where the **Generator** learns to create realistic faces while the **Discriminator** learns to distinguish between real and generated images. The project also includes a **Flask web application** for generating new faces interactively.
 
 ## 🎯 Aim
 
-To implement a Variational Autoencoder (VAE) using TensorFlow/Keras, train it on the MNIST handwritten digit dataset, and generate new MNIST-like images using the learned latent space and trained decoder.
+To implement a DCGAN using PyTorch, train it on the CelebA dataset, and generate realistic human face images using the trained Generator model.
 
 ## ✨ Key Features
 
-* Train a Variational Autoencoder on the MNIST dataset.
-* Learn a **2-dimensional latent space** representation of handwritten digits.
-* Implement the **Reparameterization Trick** for latent vector sampling.
-* Visualize reconstructed images and latent space embeddings.
-* Generate new handwritten digits from random latent vectors.
-* Save and reuse trained encoder and decoder models.
-* Deploy the trained decoder through a simple Flask interface.
+* Train a DCGAN on the CelebA face dataset.
+* Implement Generator and Discriminator using convolutional neural networks.
+* Generate realistic face images from random latent noise vectors.
+* Visualize generated images during training.
+* Save and reuse the trained Generator model.
+* Generate faces through a simple Flask web interface.
 
 ## 🛠️ Tech Stack
 
-| Technology         | Purpose                       |
-| ------------------ | ----------------------------- |
-| Python             | Programming Language          |
-| TensorFlow / Keras | Building and training the VAE |
-| NumPy              | Numerical computations        |
-| Matplotlib         | Visualization of results      |
-| Flask              | Web application backend       |
-| HTML/CSS           | Frontend interface            |
-| Google Colab       | Model training environment    |
+| Technology   | Purpose                           |
+| ------------ | --------------------------------- |
+| Python       | Programming Language              |
+| PyTorch      | DCGAN implementation and training |
+| Torchvision  | Image preprocessing and datasets  |
+| NumPy        | Numerical computations            |
+| Matplotlib   | Training and image visualization  |
+| Flask        | Web application backend           |
+| HTML/CSS     | User interface                    |
+| Google Colab | Model training environment        |
 
-## 🧩 VAE Architecture
+## 🧩 DCGAN Architecture
 
-The implemented Variational Autoencoder consists of three main components:
+The model consists of two neural networks trained simultaneously:
 
-* **Encoder** – Converts a 28×28 MNIST image into latent parameters (`z_mean` and `z_log_var`).
-* **Latent Space** – Samples latent vectors using the Reparameterization Trick.
-* **Decoder** – Reconstructs or generates new handwritten digit images from latent vectors.
+* **Generator** – Converts a 100-dimensional random noise vector into a **64×64 RGB face image** using transposed convolution layers.
+* **Discriminator** – Classifies input images as **real** or **fake** using convolution layers and adversarial learning.
 
 ## ⚙️ Project Workflow
 
-1. Load and preprocess the MNIST dataset.
-2. Normalize image pixel values.
-3. Build the Encoder and Decoder networks.
-4. Implement latent space sampling using the Reparameterization Trick.
-5. Train the VAE using Reconstruction Loss and KL Divergence.
-6. Visualize training loss and latent space distribution.
-7. Generate reconstructed and new handwritten digit images.
-8. Save the trained encoder and decoder models.
-9. Run the Flask application for interactive image generation.
+1. Load and preprocess the CelebA dataset.
+2. Resize and normalize face images.
+3. Build the Generator and Discriminator networks.
+4. Train the DCGAN using Binary Cross-Entropy (BCE) Loss and the Adam optimizer.
+5. Track Generator and Discriminator losses during training.
+6. Save the trained Generator model.
+7. Generate new face images from random latent vectors.
+8. Launch the Flask application for interactive face generation.
 
 ## 📂 Repository Structure
 
-```text
-EXP5/
-├── app.py                  # Flask application
-├── index.html              # Web interface
-├── templates/              # HTML templates
-├── vae_mnist_models/       # Saved encoder and decoder models
-├── vae_mnist_models.zip    # Archived trained models
-├── Experiment5.ipynb       # Google Colab notebook
+```text id="fyy5zt"
+EXP6/
+├── app.py                 # Flask application
+├── generator.pt           # Trained Generator model
+├── static/                # Generated images and static assets
+├── templates/             # HTML templates
+├── Experiment6.ipynb      # Google Colab notebook
 └── README.md
 ```
 
@@ -71,39 +68,34 @@ EXP5/
 
 ### 1. Install Dependencies
 
-```bash
-pip install tensorflow flask numpy matplotlib
+```bash id="mwtuj5"
+pip install torch torchvision flask numpy matplotlib pillow
 ```
 
-### 2. Start the Flask Application
+### 2. Run the Flask Application
 
-```bash
+```bash id="8vqeev"
 python app.py
 ```
 
-### 3. Open the Application
+### 3. Open the Web Interface
 
-Visit the local server displayed in the terminal (usually `http://127.0.0.1:5000`) to generate new MNIST-like handwritten digits using the trained decoder.
+After running the Flask server, open the local URL displayed in the terminal (typically `http://127.0.0.1:5000`) and click **Generate Face** to create a new AI-generated face.
 
-## 📊 Results
+## 📸 Results
 
-The project demonstrates:
-
-* Reconstruction of original MNIST images.
-* Visualization of a 2D latent space.
-* Generation of new handwritten digits from randomly sampled latent vectors.
-* Interactive image generation through a Flask interface.
+The trained Generator creates realistic human face images by sampling random latent vectors from a normal distribution. Each generated image is unique and does not exist in the original CelebA dataset.
 
 ## 📖 Learning Outcomes
 
 After completing this experiment, you will be able to:
 
-* Understand the working principle of a Variational Autoencoder.
-* Implement latent space sampling using the Reparameterization Trick.
-* Train a VAE using TensorFlow/Keras.
-* Generate new images from a learned latent distribution.
-* Deploy a trained Generative AI model using Flask.
+* Understand the working principle of Generative Adversarial Networks.
+* Implement the DCGAN architecture using PyTorch.
+* Train Generator and Discriminator networks using adversarial learning.
+* Generate synthetic face images from random noise vectors.
+* Deploy a trained GAN model using Flask.
 
 ## ✅ Conclusion
 
-This experiment provides hands-on experience with Variational Autoencoders and latent space learning for image generation. It demonstrates how probabilistic generative models can create new data samples and forms a strong foundation for more advanced Generative AI models such as GANs and diffusion models.
+This experiment demonstrates how DCGANs learn to generate realistic human faces through adversarial training. It provides practical experience with PyTorch, convolutional GAN architectures, latent space sampling, and deployment of a Generative AI model through a Flask web application.

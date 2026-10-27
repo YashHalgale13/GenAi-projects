@@ -1,79 +1,53 @@
-from flask import Flask, render_template, request, jsonify
-import tensorflow as tf
-import numpy as np
-import base64
-import io
+from flask import Flask, render_template
+import torch
+from torchvision.utils import save_image
 import os
-from PIL import Image, ImageEnhance
 
+# Create Flask app
 app = Flask(__name__)
 
-# -----------------------------
-# Load Decoder
-# -----------------------------
+# Device (CPU is fine for Mac)
+device = "cpu"
+
+# Absolute path to this project folder
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "vae_mnist_models", "vae_decoder.keras")
 
-decoder = tf.keras.models.load_model(MODEL_PATH)
+# Path to generator.pt
+MODEL_PATH = os.path.join(BASE_DIR, "generator.pt")
 
-print("✅ Decoder Loaded")
+# Load the trained DCGAN model
+generator = torch.jit.load(MODEL_PATH, map_location=device)
+generator.eval()
 
-# -----------------------------
-# Home
-# -----------------------------
+# Create static folder if it doesn't exist
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+os.makedirs(STATIC_DIR, exist_ok=True)
+
+
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return render_template("index.html", generated=False)
 
 
-# -----------------------------
-# Generate Digit
-# -----------------------------
-@app.route("/generate", methods=["POST"])
+@app.route("/generate")
 def generate():
-    try:
-        data = request.get_json()
+    # Random noise vector
+    noise = torch.randn(1, 100, 1, 1).to(device)
 
-        selected_digit = int(data["digit"])
+    # Generate face
+    with torch.no_grad():
+        fake_image = generator(noise)
 
-        # Random latent vector
-        latent_dim = decoder.input_shape[1]
-        z = tf.random.normal((1, latent_dim))
+    # Convert output from [-1,1] to [0,1]
+    fake_image = (fake_image + 1) / 2
 
-        prediction = decoder.predict(z, verbose=0)[0]
-        prediction = np.squeeze(prediction)
+    # Save generated image
+    image_path = os.path.join(STATIC_DIR, "generated.png")
+    save_image(fake_image, image_path)
 
-        prediction = np.clip(prediction, 0, 1)
-        prediction = (prediction * 255).astype(np.uint8)
-
-        image = Image.fromarray(prediction)
-
-        # Resize without blur
-        image = image.resize((336, 336), Image.Resampling.NEAREST)
-
-        # Increase contrast
-        image = ImageEnhance.Contrast(image).enhance(2.2)
-
-        # Sharpen
-        image = ImageEnhance.Sharpness(image).enhance(3)
-
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-
-        encoded = base64.b64encode(buffer.getvalue()).decode()
-
-        return jsonify({
-            "success": True,
-            "selected_digit": selected_digit,
-            "image": encoded
-        })
-
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+    return render_template("index.html", generated=True)
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    print("🚀 Starting DCGAN Face Generator...")
+    app.run(host="127.0.0.1", port=5050, debug=True)
