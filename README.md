@@ -1,101 +1,374 @@
-# 👤 Experiment 6 — Face Generation using DCGAN on the CelebA Dataset
+# 🧑‍🎨 EXP7 — StyleGAN Face Generation
 
-Generate realistic human face images using a **Deep Convolutional Generative Adversarial Network (DCGAN)** trained on the **CelebA** dataset with **PyTorch**.
+> A Generative AI application that uses a trained StyleGAN-based generator to synthesize realistic human face images from latent representations.
 
 ---
 
-## 🌟 About
+## 📌 Overview
 
-This project implements a **Deep Convolutional Generative Adversarial Network (DCGAN)** to generate synthetic human face images. The model is trained on the **CelebA** dataset, where the **Generator** learns to create realistic faces while the **Discriminator** learns to distinguish between real and generated images. The project also includes a **Flask web application** for generating new faces interactively.
+This project demonstrates **image generation using Generative Adversarial Networks (GANs)**.
 
-## 🎯 Aim
+A trained generator model is used to transform a randomly sampled latent vector into a synthetic human face. The generated image is then displayed through a simple web interface built using **Flask, HTML, and CSS**.
 
-To implement a DCGAN using PyTorch, train it on the CelebA dataset, and generate realistic human face images using the trained Generator model.
+The experiment focuses on understanding how a trained generative model can learn visual patterns and generate new images that were not directly present in the input.
 
-## ✨ Key Features
+---
 
-* Train a DCGAN on the CelebA face dataset.
-* Implement Generator and Discriminator using convolutional neural networks.
-* Generate realistic face images from random latent noise vectors.
-* Visualize generated images during training.
-* Save and reuse the trained Generator model.
-* Generate faces through a simple Flask web interface.
+## 🎯 Objective
+
+The main objectives of this experiment are:
+
+- Understand the basic concept of **Generative Adversarial Networks**
+- Explore the **StyleGAN architecture**
+- Understand the role of the **generator**
+- Learn how latent vectors can be converted into images
+- Load and use a trained PyTorch model
+- Integrate a deep learning model with a web application
+- Generate synthetic human faces using a trained generator
+
+---
+
+## 🧠 What is StyleGAN?
+
+**StyleGAN** is a generative model architecture developed by NVIDIA for high-quality image synthesis.
+
+Unlike a traditional GAN where a latent vector is directly provided to the generator, StyleGAN introduces a style-based generation process.
+
+Different parts of the network can influence different visual characteristics of the generated image.
+
+For example:
+
+```text
+Latent Representation
+        ↓
+Style Mapping / Generator
+        ↓
+Learned Visual Features
+        ↓
+Synthetic Face
+```
+
+The important idea is that the generator has learned patterns from training data and can use those learned patterns to create new images.
+
+---
+
+## ⚙️ How This Project Works
+
+The application follows the following pipeline:
+
+```text
+        Random Latent Vector
+                │
+                ▼
+      Trained StyleGAN Model
+                │
+                ▼
+        Generator Network
+                │
+                ▼
+      Synthetic Face Image
+                │
+                ▼
+          Flask Backend
+                │
+                ▼
+          Web Interface
+```
+
+### Step-by-step
+
+1. A latent vector is generated.
+2. The latent representation is passed to the trained generator.
+3. The generator transforms the latent representation into an image.
+4. The generated image is converted into a displayable format.
+5. Flask serves the generated image through the web application.
+6. The user can generate a new face through the interface.
+
+---
+
+## ✨ Features
+
+- 🎨 Synthetic human face generation
+- 🧠 Trained deep learning generator
+- ⚡ PyTorch-based inference
+- 🌐 Flask web application
+- 🖥️ Simple browser-based interface
+- 🔄 Generate new images on demand
+- 🍎 Supports Apple Silicon acceleration through MPS when available
+
+---
 
 ## 🛠️ Tech Stack
 
-| Technology   | Purpose                           |
-| ------------ | --------------------------------- |
-| Python       | Programming Language              |
-| PyTorch      | DCGAN implementation and training |
-| Torchvision  | Image preprocessing and datasets  |
-| NumPy        | Numerical computations            |
-| Matplotlib   | Training and image visualization  |
-| Flask        | Web application backend           |
-| HTML/CSS     | User interface                    |
-| Google Colab | Model training environment        |
+| Technology | Purpose |
+|------------|---------|
+| Python | Core programming language |
+| PyTorch | Deep learning model and inference |
+| StyleGAN | Image generation architecture |
+| Flask | Backend web framework |
+| HTML/CSS | User interface |
+| NumPy | Numerical operations |
+| Pillow | Image processing |
 
-## 🧩 DCGAN Architecture
+---
 
-The model consists of two neural networks trained simultaneously:
+## 📁 Project Structure
 
-* **Generator** – Converts a 100-dimensional random noise vector into a **64×64 RGB face image** using transposed convolution layers.
-* **Discriminator** – Classifies input images as **real** or **fake** using convolution layers and adversarial learning.
-
-## ⚙️ Project Workflow
-
-1. Load and preprocess the CelebA dataset.
-2. Resize and normalize face images.
-3. Build the Generator and Discriminator networks.
-4. Train the DCGAN using Binary Cross-Entropy (BCE) Loss and the Adam optimizer.
-5. Track Generator and Discriminator losses during training.
-6. Save the trained Generator model.
-7. Generate new face images from random latent vectors.
-8. Launch the Flask application for interactive face generation.
-
-## 📂 Repository Structure
-
-```text id="fyy5zt"
-EXP6/
-├── app.py                 # Flask application
-├── generator.pt           # Trained Generator model
-├── static/                # Generated images and static assets
-├── templates/             # HTML templates
-├── Experiment6.ipynb      # Google Colab notebook
-└── README.md
+```text
+EXP7/
+│
+├── model/
+│   └── stylegan_trained.pth
+│
+├── app.py
+├── index.html
+├── requirements.txt
+├── README.md
+└── .gitignore
 ```
 
-## ▶️ Running the Project
+### File Description
 
-### 1. Install Dependencies
+**`app.py`**
 
-```bash id="mwtuj5"
-pip install torch torchvision flask numpy matplotlib pillow
+Contains the Flask application and model inference logic.
+
+**`index.html`**
+
+Provides the frontend interface used to interact with the generator.
+
+**`model/stylegan_trained.pth`**
+
+Contains the trained PyTorch model weights used for image generation.
+
+**`requirements.txt`**
+
+Contains the Python dependencies required to run the project.
+
+**`.gitignore`**
+
+Prevents unnecessary files such as virtual environments, Python cache files, and macOS system files from being committed.
+
+---
+
+## 🚀 Installation & Setup
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/Kartikibansod/Generative-AI.git
+cd Generative-AI/EXP7
 ```
 
-### 2. Run the Flask Application
+### 2. Create a virtual environment
 
-```bash id="8vqeev"
+```bash
+python3 -m venv venv
+```
+
+### 3. Activate the virtual environment
+
+#### macOS / Linux
+
+```bash
+source venv/bin/activate
+```
+
+#### Windows
+
+```bash
+venv\Scripts\activate
+```
+
+### 4. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## ▶️ Run the Application
+
+Start the Flask server:
+
+```bash
 python app.py
 ```
 
-### 3. Open the Web Interface
+The terminal will display the local application address.
 
-After running the Flask server, open the local URL displayed in the terminal (typically `http://127.0.0.1:5000`) and click **Generate Face** to create a new AI-generated face.
+Open the displayed URL in your browser.
 
-## 📸 Results
+For example:
 
-The trained Generator creates realistic human face images by sampling random latent vectors from a normal distribution. Each generated image is unique and does not exist in the original CelebA dataset.
+```text
+http://127.0.0.1:5000
+```
 
-## 📖 Learning Outcomes
+---
 
-After completing this experiment, you will be able to:
+## 🖥️ Using the Application
 
-* Understand the working principle of Generative Adversarial Networks.
-* Implement the DCGAN architecture using PyTorch.
-* Train Generator and Discriminator networks using adversarial learning.
-* Generate synthetic face images from random noise vectors.
-* Deploy a trained GAN model using Flask.
+Once the application is running:
 
-## ✅ Conclusion
+```text
+Open Browser
+     ↓
+Open Flask URL
+     ↓
+Click "Generate"
+     ↓
+Latent Vector
+     ↓
+StyleGAN Generator
+     ↓
+Generated Face
+```
 
-This experiment demonstrates how DCGANs learn to generate realistic human faces through adversarial training. It provides practical experience with PyTorch, convolutional GAN architectures, latent space sampling, and deployment of a Generative AI model through a Flask web application.
+Each generation can produce a different synthetic face depending on the latent representation used.
+
+---
+
+## 🔬 Model
+
+The project uses a trained PyTorch model stored as:
+
+```text
+model/stylegan_trained.pth
+```
+
+The `.pth` file contains the learned model parameters required during inference.
+
+It is loaded by the Flask backend when the application starts.
+
+```text
+stylegan_trained.pth
+        ↓
+PyTorch
+        ↓
+Generator
+        ↓
+Latent Vector
+        ↓
+Generated Image
+```
+
+---
+
+## 🧩 Generator vs. Latent Vector
+
+These two concepts are important for understanding the project.
+
+### Latent Vector
+
+A latent vector is a numerical representation that provides the generator with information from which an image can be synthesized.
+
+```text
+Random numbers
+      ↓
+Latent Vector
+      ↓
+Generator
+```
+
+### Generator
+
+The **generator is the neural network that actually creates the image**.
+
+```text
+Latent Vector
+      ↓
+Generator
+      ↓
+Image
+```
+
+In this project:
+
+```text
+Latent Vector → Trained Generator → Synthetic Face
+```
+
+---
+
+## 📊 Output
+
+The application produces a synthetic human face generated by the trained model.
+
+The output is **not a photograph retrieved from a database**. It is generated by the neural network from its learned representation.
+
+---
+
+## 📚 Learning Outcomes
+
+Through this experiment, I learned:
+
+- Fundamentals of GAN-based image generation
+- The concept of latent representations
+- The role of a generator in GANs
+- Basics of StyleGAN
+- Loading PyTorch model weights
+- Performing model inference
+- Image processing using Pillow
+- Connecting a deep learning model with Flask
+- Creating a simple frontend for a generative AI application
+- Running deep learning inference on Apple Silicon using MPS when available
+
+---
+
+## ⚠️ Limitations
+
+This project is intended primarily as a learning experiment.
+
+Possible limitations include:
+
+- Generated image quality depends on the trained model
+- The model is limited by the characteristics of its training data
+- The application performs inference using a pre-trained model rather than training StyleGAN from scratch
+- Generation speed depends on available hardware
+- The current interface provides limited control over generated attributes
+
+---
+
+## 🔮 Future Improvements
+
+Possible extensions include:
+
+- Add user-controlled latent seeds
+- Add image generation history
+- Allow users to download generated images
+- Add adjustable generation parameters
+- Add latent-space interpolation
+- Add side-by-side image comparison
+- Improve the frontend design
+- Deploy the application online
+- Add more advanced StyleGAN controls
+
+---
+
+## 🧪 Experiment Summary
+
+This experiment demonstrates the complete path from a **latent representation to a generated image** and shows how a trained generative AI model can be integrated into a web application.
+
+```text
+                GENERATIVE AI
+                     │
+                     ▼
+              Latent Vector
+                     │
+                     ▼
+             StyleGAN Generator
+                     │
+                     ▼
+             Synthetic Face
+                     │
+                     ▼
+                Flask App
+                     │
+                     ▼
+              Web Browser
+```
+
+---
+
