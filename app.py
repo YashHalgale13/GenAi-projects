@@ -1,397 +1,211 @@
+import json
+import logging
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import quote, unquote, urlparse
+
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from dotenv import load_dotenv
 
-from flask import Flask, jsonify, send_file
-import io
-import base64
-from PIL import Image
+from music_engine.generator import generate_music
+from music_engine.model import DEFAULT_MODEL_ID, get_adapter_path, musicgen_is_loaded
+
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env", override=False)
+
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "outputs"))
+if not OUTPUT_DIR.is_absolute():
+    OUTPUT_DIR = BASE_DIR / OUTPUT_DIR
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+STATIC_DIR = BASE_DIR / "static"
+MODEL_ID = os.getenv("MUSICGEN_MODEL_ID", DEFAULT_MODEL_ID)
+GENERATION_LOCK = threading.Lock()
+MAX_REQUEST_BYTES = 16_384
+GENRES = {
+    "Jazz",
+    "Classical",
+    "Lo-fi",
+    "Hip-hop",
+    "Pop",
+    "Rock",
+    "Electronic",
+    "Ambient",
+    "Cinematic",
+    "Blues",
+    "Folk",
+    "No specific genre",
+}
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("musicgen")
 
 
-# =========================================================
-# DEVICE
-# =========================================================
+def adapter_is_ready() -> bool:
+    adapter_path = get_adapter_path()
+    if not adapter_path:
+        return False
 
-if torch.backends.mps.is_available():
-    device = torch.device("mps")
-elif torch.cuda.is_available():
-    device = torch.device("cuda")
-else:
-    device = torch.device("cpu")
-
-print("Using device:", device)
-
-
-# =========================================================
-# MODEL CLASSES
-# Same architecture used in your Colab
-# =========================================================
-
-class PixelNorm(nn.Module):
-    def forward(self, x):
-        return x / torch.sqrt(
-            torch.mean(x ** 2, dim=1, keepdim=True) + 1e-8
+    adapter = Path(adapter_path)
+    return (
+        adapter.is_dir()
+        and (adapter / "adapter_config.json").is_file()
+        and (
+            (adapter / "adapter_model.safetensors").is_file()
+            or (adapter / "adapter_model.bin").is_file()
         )
-
-
-class MappingNetwork(nn.Module):
-    def __init__(self, z_dim=256, w_dim=256, n_layers=6):
-        super().__init__()
-
-        layers = [PixelNorm()]
-        in_dim = z_dim
-
-        for _ in range(n_layers):
-            layers.append(nn.Linear(in_dim, w_dim))
-            layers.append(nn.LeakyReLU(0.2, inplace=True))
-            in_dim = w_dim
-
-        self.mapping = nn.Sequential(*layers)
-
-    def forward(self, z):
-        return self.mapping(z)
-
-
-class AdaIN(nn.Module):
-    def __init__(self, channels, w_dim):
-        super().__init__()
-
-        self.instance_norm = nn.InstanceNorm2d(
-            channels,
-            affine=False
-        )
-
-        self.style_scale = nn.Linear(w_dim, channels)
-        self.style_bias = nn.Linear(w_dim, channels)
-
-        nn.init.ones_(self.style_scale.bias)
-        nn.init.zeros_(self.style_bias.bias)
-
-    def forward(self, x, w):
-        x = self.instance_norm(x)
-
-        scale = self.style_scale(w).unsqueeze(2).unsqueeze(3)
-        bias = self.style_bias(w).unsqueeze(2).unsqueeze(3)
-
-        return scale * x + bias
-
-
-class NoiseInjection(nn.Module):
-    def __init__(self, channels):
-        super().__init__()
-
-        self.weight = nn.Parameter(
-            torch.zeros(1, channels, 1, 1)
-        )
-
-    def forward(self, x, noise=None):
-
-        if noise is None:
-            noise = torch.randn(
-                x.size(0),
-                1,
-                x.size(2),
-                x.size(3),
-                device=x.device
-            )
-
-        return x + self.weight * noise
-
-
-class SynthesisBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, w_dim, upsample=True):
-        super().__init__()
-
-        self.upsample = upsample
-
-        self.conv1 = nn.Conv2d(
-            in_ch,
-            out_ch,
-            3,
-            padding=1
-        )
-
-        self.noise1 = NoiseInjection(out_ch)
-        self.adain1 = AdaIN(out_ch, w_dim)
-
-        self.conv2 = nn.Conv2d(
-            out_ch,
-            out_ch,
-            3,
-            padding=1
-        )
-
-        self.noise2 = NoiseInjection(out_ch)
-        self.adain2 = AdaIN(out_ch, w_dim)
-
-        self.act = nn.LeakyReLU(
-            0.2,
-            inplace=True
-        )
-
-    def forward(self, x, w):
-
-        if self.upsample:
-            x = F.interpolate(
-                x,
-                scale_factor=2,
-                mode="bilinear",
-                align_corners=False
-            )
-
-        x = self.act(self.conv1(x))
-        x = self.noise1(x)
-        x = self.adain1(x, w)
-
-        x = self.act(self.conv2(x))
-        x = self.noise2(x)
-        x = self.adain2(x, w)
-
-        return x
-
-
-class Generator(nn.Module):
-
-    def __init__(
-        self,
-        w_dim=256,
-        base_channels=256,
-        img_channels=3
-    ):
-        super().__init__()
-
-        self.channels = {
-            4: 256,
-            8: 256,
-            16: 128,
-            32: 64,
-            64: 32
-        }
-
-        self.resolutions = [
-            4,
-            8,
-            16,
-            32,
-            64
-        ]
-
-        self.starting_constant = nn.Parameter(
-            torch.randn(
-                1,
-                self.channels[4],
-                4,
-                4
-            )
-        )
-
-        self.initial_noise = NoiseInjection(
-            self.channels[4]
-        )
-
-        self.initial_adain1 = AdaIN(
-            self.channels[4],
-            w_dim
-        )
-
-        self.initial_conv = nn.Conv2d(
-            self.channels[4],
-            self.channels[4],
-            3,
-            padding=1
-        )
-
-        self.initial_noise2 = NoiseInjection(
-            self.channels[4]
-        )
-
-        self.initial_adain2 = AdaIN(
-            self.channels[4],
-            w_dim
-        )
-
-        self.act = nn.LeakyReLU(
-            0.2,
-            inplace=True
-        )
-
-        self.blocks = nn.ModuleList()
-
-        for i in range(1, len(self.resolutions)):
-
-            in_ch = self.channels[
-                self.resolutions[i - 1]
-            ]
-
-            out_ch = self.channels[
-                self.resolutions[i]
-            ]
-
-            self.blocks.append(
-                SynthesisBlock(
-                    in_ch,
-                    out_ch,
-                    w_dim,
-                    upsample=True
-                )
-            )
-
-        self.to_rgb = nn.Conv2d(
-            self.channels[64],
-            img_channels,
-            kernel_size=1
-        )
-
-        self.num_style_inputs = 1 + len(self.blocks)
-
-    def forward(self, ws):
-
-        if isinstance(ws, torch.Tensor):
-            ws = [ws] * self.num_style_inputs
-
-        batch = ws[0].shape[0]
-
-        x = self.starting_constant.expand(
-            batch,
-            -1,
-            -1,
-            -1
-        )
-
-        x = self.initial_noise(x)
-        x = self.initial_adain1(x, ws[0])
-
-        x = self.act(
-            self.initial_conv(x)
-        )
-
-        x = self.initial_noise2(x)
-        x = self.initial_adain2(x, ws[0])
-
-        for i, block in enumerate(self.blocks):
-
-            x = block(
-                x,
-                ws[i + 1]
-            )
-
-        return torch.tanh(
-            self.to_rgb(x)
-        )
-
-
-# =========================================================
-# LOAD TRAINED MODEL
-# =========================================================
-
-Z_DIM = 256
-W_DIM = 256
-
-mapping_network = MappingNetwork(
-    Z_DIM,
-    W_DIM,
-    n_layers=6
-).to(device)
-
-generator = Generator(
-    w_dim=W_DIM,
-    base_channels=256
-).to(device)
-
-
-MODEL_PATH = "model/stylegan_trained.pth"
-
-checkpoint = torch.load(
-    MODEL_PATH,
-    map_location=device
-)
-
-mapping_network.load_state_dict(
-    checkpoint["mapping_network"]
-)
-
-generator.load_state_dict(
-    checkpoint["generator"]
-)
-
-mapping_network.eval()
-generator.eval()
-
-print("✅ StyleGAN model loaded successfully!")
-
-
-# =========================================================
-# FLASK APP
-# =========================================================
-
-app = Flask(__name__)
-
-
-@app.route("/")
-def home():
-
-    return send_file("index.html")
-
-
-@app.route("/generate")
-def generate():
-
-    with torch.no_grad():
-
-        z = torch.randn(
-            1,
-            Z_DIM,
-            device=device
-        )
-
-        w = mapping_network(z)
-
-        image = generator(w)
-
-    # Convert [-1, 1] → [0, 1]
-    image = (image + 1) / 2
-
-    image = image.clamp(0, 1)
-
-    # CHW → HWC
-    image = image[0].permute(
-        1,
-        2,
-        0
     )
 
-    image = (
-        image.cpu().numpy() * 255
-    ).astype("uint8")
 
-    pil_image = Image.fromarray(
-        image
-    )
+class MusicGenHandler(BaseHTTPRequestHandler):
+    server_version = "MusicGenLocal/1.0"
 
-    # Convert image to base64
-    buffer = io.BytesIO()
+    def log_message(self, format_string: str, *args: object) -> None:
+        logger.info("%s - %s", self.address_string(), format_string % args)
 
-    pil_image.save(
-        buffer,
-        format="PNG"
-    )
+    def _send_bytes(self, body: bytes, content_type: str, status: int = 200) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
-    image_base64 = base64.b64encode(
-        buffer.getvalue()
-    ).decode("utf-8")
+    def _send_json(self, payload: dict, status: int = 200) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        self._send_bytes(body, "application/json; charset=utf-8", status)
 
-    return jsonify({
-        "image": image_base64
-    })
+    def _read_json(self) -> dict:
+        raw_length = self.headers.get("Content-Length", "")
+        try:
+            length = int(raw_length)
+        except ValueError as exc:
+            raise ValueError("A valid Content-Length header is required.") from exc
+
+        if length <= 0 or length > MAX_REQUEST_BYTES:
+            raise ValueError("Request body must be between 1 byte and 16 KB.")
+
+        try:
+            payload = json.loads(self.rfile.read(length))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError("Request body must be valid JSON.") from exc
+
+        if not isinstance(payload, dict):
+            raise ValueError("Request body must be a JSON object.")
+        return payload
+
+    def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+
+        if parsed.path == "/":
+            page = STATIC_DIR / "index.html"
+            if not page.is_file():
+                self._send_json({"error": "The local web page is missing."}, 500)
+                return
+            self._send_bytes(page.read_bytes(), "text/html; charset=utf-8")
+            return
+
+        if parsed.path == "/api/status":
+            self._send_json(
+                {
+                    "adapter_ready": adapter_is_ready(),
+                    "model_id": MODEL_ID,
+                    "device": "cuda" if torch.cuda.is_available() else "cpu",
+                    "model_loaded": musicgen_is_loaded(),
+                }
+            )
+            return
+
+        if parsed.path.startswith("/outputs/"):
+            filename = unquote(parsed.path.removeprefix("/outputs/"))
+            if Path(filename).name != filename or not filename.lower().endswith(".wav"):
+                self._send_json({"error": "Audio file not found."}, 404)
+                return
+            audio_path = (OUTPUT_DIR / filename).resolve()
+            if audio_path.parent != OUTPUT_DIR.resolve() or not audio_path.is_file():
+                self._send_json({"error": "Audio file not found."}, 404)
+                return
+            self._send_bytes(audio_path.read_bytes(), "audio/wav")
+            return
+
+        self._send_json({"error": "Not found."}, 404)
+
+    def do_POST(self) -> None:
+        if urlparse(self.path).path != "/api/generate":
+            self._send_json({"error": "Not found."}, 404)
+            return
+
+        try:
+            payload = self._read_json()
+            prompt = payload.get("prompt")
+            genre = payload.get("genre")
+            duration = payload.get("duration")
+            instrumental = payload.get("instrumental")
+
+            if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 500:
+                raise ValueError("Enter a prompt that is between 1 and 500 characters.")
+            if not isinstance(genre, str) or genre not in GENRES:
+                raise ValueError("Choose a genre from the list.")
+            if isinstance(duration, bool) or not isinstance(duration, int) or not 3 <= duration <= 15:
+                raise ValueError("Duration must be between 3 and 15 seconds.")
+            if not isinstance(instrumental, bool):
+                raise ValueError("Instrumental must be true or false.")
+        except ValueError as exc:
+            self._send_json({"error": str(exc)}, 400)
+            return
+
+        if not adapter_is_ready():
+            self._send_json(
+                {"error": "The LoRA adapter is missing or incomplete. Check LORA_ADAPTER_PATH and adapter files."},
+                503,
+            )
+            return
+
+        if not GENERATION_LOCK.acquire(blocking=False):
+            self._send_json({"error": "A track is already being generated. Please wait for it to finish."}, 409)
+            return
+
+        try:
+            result = generate_music(
+                prompt=prompt.strip(),
+                genre=genre,
+                duration_seconds=duration,
+                instrumental=instrumental,
+                output_dir=OUTPUT_DIR,
+            )
+            audio_name = Path(result["path"]).name
+            self._send_json(
+                {
+                    "filename": audio_name,
+                    "audio_url": f"/outputs/{quote(audio_name)}",
+                    "prompt": result["prompt"],
+                    "duration": result["duration"],
+                    "sample_rate": result["sample_rate"],
+                }
+            )
+        except Exception as exc:
+            logger.exception("Music generation failed")
+            self._send_json({"error": f"Music generation failed: {exc}"}, 500)
+        finally:
+            GENERATION_LOCK.release()
 
 
-# =========================================================
-# RUN SERVER
-# =========================================================
+def main() -> None:
+    port = int(os.getenv("PORT", "8000"))
+    server = ThreadingHTTPServer(("127.0.0.1", port), MusicGenHandler)
+    print(f"MusicGen is running at http://127.0.0.1:{port}")
+    print(f"Adapter available: {'yes' if adapter_is_ready() else 'no'}")
+    print(f"Compute device: {'CUDA' if torch.cuda.is_available() else 'CPU'}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopping MusicGen server...")
+    finally:
+        server.server_close()
+
 
 if __name__ == "__main__":
-
-    app.run(
-        debug=True,
-        port=5000
-    )
+    main()
